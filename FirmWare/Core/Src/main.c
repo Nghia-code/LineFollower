@@ -19,6 +19,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
+#include "i2c.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -64,11 +66,11 @@ void SystemClock_Config(void);
 
 void read_sensor(void)
 {
-	  sensor[0] = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
-	  sensor[1] = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1);
-	  sensor[2] = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_2);
-	  sensor[3] = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_3);
-	  sensor[4] = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
+	  sensor[0] = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15);
+	  sensor[1] = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_3);
+	  sensor[2] = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_14);
+	  sensor[3] = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_4);
+	  sensor[4] = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_5);
 	  //if only middle sensor detects black line
 	  if (sensor[0] == 1 && sensor[1] == 1 && sensor[2] == 0 && sensor[3] == 1 && sensor[4] == 1)
 		  error = 0;
@@ -124,10 +126,24 @@ void read_sensor(void)
 
 	  //if all sensors are on a black line - 10
 	  if(sensor[0] == 1 && sensor[1] == 1 && sensor[2] == 0 && sensor[3] == 0 && sensor[4] == 0)
-		  error = 100;
+		  error = 6;
 
 
+}
 
+void go_straight_ahead(void){
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+}
+
+void go_back(void){
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+}
+
+void stop(void){
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
 }
 /* USER CODE END PFP */
 
@@ -166,9 +182,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
-  MX_TIM3_Init();
+  MX_ADC1_Init();
+  MX_I2C1_Init();
+  MX_USART2_UART_Init();
   MX_TIM4_Init();
-  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
 
   PID_init(&PID_LEFT, (float)30, (float)200, (float)180);
@@ -176,11 +193,11 @@ int main(void)
   PID_set_params(&PID_LEFT, (float)50, (float)0.001, (float)30);
   PID_set_params(&PID_RIGHT, (float)50, (float)0.001, (float)30);
 
-  HAL_TIM_Base_Start_IT(&htim1);
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+  HAL_TIM_Base_Start_IT(&htim4);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
+ // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
+  //HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -190,9 +207,11 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+	  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3,L_motor_speed);
+//	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+//	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
 //		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1,600);
 //			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2,0);
 //			__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1,500);
@@ -210,6 +229,7 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -237,11 +257,17 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV2;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /* USER CODE BEGIN 4 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-	if(htim->Instance == htim1.Instance ){
+	if(htim->Instance == htim4.Instance ){
 		read_sensor();
 		PID_update(&PID_LEFT, 0 , error);
 		PID_update(&PID_RIGHT, 0 , error);
@@ -249,13 +275,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		R_motor_speed = init_speed + PID_ReadValue(&PID_LEFT)+ 50;
 		L_motor_speed = init_speed + PID_ReadValue(&PID_RIGHT)+ 50;
 
-		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1,L_motor_speed);
-		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2,0);
-		__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1,R_motor_speed);
-		__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2,0);
+		__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3,L_motor_speed);
+		go_back();
+		//__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3,200);
+		__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_4,R_motor_speed);
+		//__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2,0);
 
 
-		if(error == 100){
+		if(error == 6){
 			__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1,0);
 			__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1,0);
 			return;

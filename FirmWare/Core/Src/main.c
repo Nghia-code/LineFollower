@@ -27,20 +27,25 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "PID.h"
+#include "Control\PID.h"
 #include "stdbool.h"
+//#include "Control\Sensor.h"
+extern int sensor[5];
+extern int  error = 0;
 
-float error = 0;
-int sensor[5];
 int R_motor_speed = 0, L_motor_speed = 0;
 int init_speed = 200;
+
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-PID_t PID_LEFT = {.Kp = 50, .Ki = 0.0001, .Kd = 30, .dt = 30,  .I_saturation = 180, .error = 0, .last_err = 0};
-PID_t PID_RIGHT = {.Kp = 50, .Ki = 0.0001, .Kd = 30, .dt = 30,  .I_saturation = 180, .error = 0, .last_err = 0};
+PID_t PID_LEFT = {.Kp = 50, .Ki = 0.001, .Kd = 10,
+		.dt = 30,  .I_saturation = 180, .error = 0, .last_err = 0};
+
+PID_t PID_RIGHT = {.Kp = 50, .Ki = 0.001, .Kd = 10,
+		.dt = 30,  .I_saturation = 180, .error = 0, .last_err = 0};
 
 /* USER CODE END PTD */
 
@@ -56,89 +61,30 @@ PID_t PID_RIGHT = {.Kp = 50, .Ki = 0.0001, .Kd = 30, .dt = 30,  .I_saturation = 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+//sensor
+uint8_t read_sensor();
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 /* USER CODE BEGIN PFP */
 
-
-void read_sensor(void)
-{
-	  sensor[0] = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15);
-	  sensor[1] = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_3);
-	  sensor[2] = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_14);
-	  sensor[3] = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_4);
-	  sensor[4] = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_5);
-	  //if only middle sensor detects black line
-	  if (sensor[0] == 1 && sensor[1] == 1 && sensor[2] == 0 && sensor[3] == 1 && sensor[4] == 1)
-		  error = 0;
-	  //going forward with full speed [1 1 0 1 1]- 1
-
-
-	  //if only left sensor detects black line
-	  if (sensor[0] == 1 && sensor[1] == 0 && sensor[2] == 1 && sensor[3] == 1 && sensor[4] == 1)
-		  error = -1;
-	  //going right with full speed [1 0 1 1 1] - 2
-
-
-	  //if only left most sensor detects black line
-	  if (sensor[0] == 0 && sensor[1] == 1 && sensor[2] == 1 && sensor[3] == 1 && sensor[4] == 1)
-		  error = -4;
-	  //going right with full speed [0 1 1 1 1]- 3
-
-
-	  //if only right sensor detects black line
-	  if(sensor[0] == 1 && sensor[1] == 1 && sensor[2] == 1 && sensor[3] == 0 && sensor[4] ==1)
-		  error = 1;
-	  //going left with full speed [1 1 1 0 1] - 4
-
-
-	  //if only right most sensor detects black line
-	  if(sensor[0] == 1 && sensor[1] == 1 && sensor[2] == 1 && sensor[3] == 1 && sensor[4] == 0)
-	   	  error = 4;
-	  //going left with full speed [1 1 1 1 0] - 5
-
-
-	  //if middle and right sensor detects black line
-	  if(sensor[0] == 1 && sensor[1] == 1 && sensor[2] == 0 && sensor[3] == 0 && sensor[4] == 1)
-	 	  error = 2;
-	  //going left with full speed [1 1 0 0 1] - 6
-
-
-	  //if middle and left sensor detects black line
-	  if(sensor[0] == 1 && sensor[1] == 0 && sensor[2] == 0 && sensor[3] == 1 && sensor[4] == 1)
-		  error = -2;
-	  //going right with full speed [1 0 0 1 1] - 7
-
-
-	  //if middle, left and left most sensor detects black line
-	  if(sensor[0] == 0 && sensor[1] == 0 && sensor[2] == 0 && sensor[3] == 1 && sensor[4] == 1)
-		 error = -3;
-	  //going right with full speed [0 0 0 1 1] - 8
-
-
-	  //if middle, right and right most sensor detects black line
-	  if(sensor[0] == 1 && sensor[1] == 1 && sensor[2] == 0 && sensor[3] == 0 && sensor[4] == 0)
-		  error = 3;
-	  //going left with full speed [1 1 0 0 0] - 9
-
-	  //if all sensors are on a black line - 10
-	  if(sensor[0] == 1 && sensor[1] == 1 && sensor[2] == 0 && sensor[3] == 0 && sensor[4] == 0)
-		  error = 6;
-
-
-}
-
 void go_straight_ahead(void){
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, 1);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, 0);
+	__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3,L_motor_speed);
+	__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_4,R_motor_speed);
+
 }
 
 void go_back(void){
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+	__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3,L_motor_speed);
+	__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_4,R_motor_speed);
 }
 
 void stop(void){
@@ -188,16 +134,14 @@ int main(void)
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
-  PID_init(&PID_LEFT, (float)30, (float)200, (float)180);
-  PID_init(&PID_RIGHT, (float)30, (float)200, (float)180);
-  PID_set_params(&PID_LEFT, (float)50, (float)0.001, (float)30);
-  PID_set_params(&PID_RIGHT, (float)50, (float)0.001, (float)30);
+  PID_init(&PID_LEFT, (float)30, (float)80, (float)100);
+  PID_init(&PID_RIGHT, (float)30, (float)80, (float)100);
+  PID_set_params(&PID_LEFT, (float)10, (float)0.01, (float)0);
+  PID_set_params(&PID_RIGHT, (float)10, (float)0.01, (float)0);
 
   HAL_TIM_Base_Start_IT(&htim4);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
- // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
-  //HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -207,16 +151,14 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
-	  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3,L_motor_speed);
+
+
 //	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 //	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
 //		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1,600);
 //			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2,0);
 //			__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1,500);
 //			__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2,0);
-
   }
   /* USER CODE END 3 */
 }
@@ -267,26 +209,18 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-	if(htim->Instance == htim4.Instance ){
+	if(htim->Instance == htim4.Instance){
+		error = read_sensor();
+
 		read_sensor();
+
+
 		PID_update(&PID_LEFT, 0 , error);
 		PID_update(&PID_RIGHT, 0 , error);
+		R_motor_speed =  PID_ReadValue(&PID_LEFT);
+		L_motor_speed =  PID_ReadValue(&PID_RIGHT);
+//		go_straight_ahead();
 
-		R_motor_speed = init_speed + PID_ReadValue(&PID_LEFT)+ 50;
-		L_motor_speed = init_speed + PID_ReadValue(&PID_RIGHT)+ 50;
-
-		__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3,L_motor_speed);
-		go_back();
-		//__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3,200);
-		__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_4,R_motor_speed);
-		//__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2,0);
-
-
-		if(error == 6){
-			__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1,0);
-			__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1,0);
-			return;
-		}
 	}
 }
 

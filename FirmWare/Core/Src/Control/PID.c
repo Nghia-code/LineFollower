@@ -22,7 +22,7 @@ void PID_set_params(PID_t *pid, float Kp, float Ki, float Kd)
 
 float PID_update(PID_t *pid, float SP, float PV)
 {
-	pid->error = SP - PV;
+	pid->error = PV - SP;
 	pid->P_part = pid->Kp * pid->error;
 
 	// Trapezoidal approximation
